@@ -2,7 +2,7 @@ import React, {useState} from 'react';
 import './App.css';
 
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, Firestore, collection, doc } from "firebase/firestore";
 
 function App() {
   const firebaseConfig = {
@@ -15,8 +15,10 @@ function App() {
     appId: "1:208076736873:web:081ff558e2fd46bfb0d5f8"
   };
 
-  const [permissionButton, setPermissionButton] = useState(false);
-  const [createCallButton, setCreateCallButton] = useState(true);
+  const [permissionButtonDisabled, setPermissionButtonDisabled] = useState(false);
+  const [createCallButtonDisabled, setCreateCallButtonDisabled] = useState(true);
+  const [hangupButtonDisabled, setHangupButtonDisabled] = useState(true);
+  const [answerCallButtonDisabled, setAnswerCallButtonDisabled] = useState(true);  
 
   const firebaseApp = initializeApp(firebaseConfig);
   const firestore = getFirestore(firebaseApp);
@@ -34,8 +36,9 @@ function App() {
   };
 
   const peerConnection = new RTCPeerConnection(iceServers);
-  
 
+  let localVideoStream: MediaStream;
+  let remoteVideoStream: MediaStream;
 
   return (
     <div className="App">
@@ -51,11 +54,17 @@ function App() {
           </span>
         </div>
 
-        <button id="permissionButton" onClick={getPermissions} disabled={permissionButton}>Get Permissions</button>
+        <button id="permissionButton" onClick={getPermissions} disabled={permissionButtonDisabled}>Get Permissions</button>
         <h2>2. Create a new Call</h2>
-        <button id="createCallButton" onClick={createCall} disabled={createCallButton}>Create Call Link</button>
+        <button id="createCallButton" onClick={createCall} disabled={createCallButtonDisabled}>Create Call Link</button>
 
+        <h2>3. Join a Call</h2>    
+        <input id="callInputID" disabled={answerCallButtonDisabled} />
+        <button id="answerCallButton" disabled={answerCallButtonDisabled} >Answer</button>
 
+        <h2>4. Hangup</h2>
+
+        <button id="hangupCallButton" disabled={hangupButtonDisabled} >Hangup</button>
       </header>
     </div>
   );
@@ -63,26 +72,57 @@ function App() {
   function getPermissions() {
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       .then(mediaContent => {
-        const localVideo: HTMLVideoElement = document.getElementById('localVideo') as HTMLVideoElement;
-        localVideo.srcObject = mediaContent;
-        setCreateCallButton(false);
-        setPermissionButton(true);
-      })
-      .catch(err => {
+        localVideoStream = mediaContent;
+        remoteVideoStream = new MediaStream();
+
+        localVideoStream.getTracks().forEach(track => {
+          peerConnection.addTrack(track, localVideoStream);
+        });
+
+        peerConnection.ontrack = event => {
+          event.streams[0].getTracks().forEach(track => {
+            remoteVideoStream.addTrack(track);
+          });
+        }
+
+        // display local video stream on the page
+        const localVideo = document.getElementById('localVideo') as HTMLMediaElement;
+        localVideo.srcObject = localVideoStream;
+
+        setCreateCallButtonDisabled(false);
+        setAnswerCallButtonDisabled(false);
+        setPermissionButtonDisabled(true);
+      }).catch(err => {
         // prompt user that permission was denied
         window.alert('Permission denied');
         console.log(err);
       });
   }
 
-  function createCall() {
-    window.alert('Create Call');
+  async function createCall() {
+    // console.log(firestore)
+    const rootCollection = collection(firestore, 'calls');
+    const offerCandidates = doc(rootCollection, 'offerCandidates');
+    const answerCandidates = doc(rootCollection, 'answerCandidates');
+    console.log(rootCollection)
+    console.log(offerCandidates);
+    console.log(answerCandidates);
+    // const callStorageDoc = firestore.collection('calls').doc();
+    // const offerCandidates = callStorageDoc.collection('offerCandidates');
+    // const answerCandidates = callStorageDoc.collection('answerCandidates');
+
+    const callInputID = document.getElementById('callInputID') as HTMLInputElement;
+    // callInputID.value = callStorageDoc.id;
+
+    // window.alert('Create Call');
+
     console.log('Create Call');
-    // create a new call 
+    
+    // create a new call
+    setAnswerCallButtonDisabled(false);
+    setHangupButtonDisabled(false);
   }
 }
-
-
 
 
 export default App;
